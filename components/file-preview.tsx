@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Image from "next/image";
+import { useEffect, useState, useRef } from "react";
 
 interface FilePreviewProps {
   file: File | null;
@@ -9,20 +8,27 @@ interface FilePreviewProps {
 
 export function FilePreview({ file }: FilePreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!file) {
       setPreviewUrl(null);
+      setPdfUrl(null);
       return;
     }
 
+    const url = URL.createObjectURL(file);
+
     if (file.type.startsWith("image/")) {
-      const url = URL.createObjectURL(file);
       setPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
+      setPdfUrl(null);
+    } else if (file.type === "application/pdf") {
+      setPdfUrl(url);
+      setPreviewUrl(null);
     }
 
-    setPreviewUrl(null);
+    return () => URL.revokeObjectURL(url);
   }, [file]);
 
   if (!file) {
@@ -37,17 +43,14 @@ export function FilePreview({ file }: FilePreviewProps) {
     );
   }
 
-  if (file.type === "application/pdf") {
+  if (pdfUrl) {
     return (
-      <div className="h-full flex flex-col items-center justify-center rounded-lg border bg-card p-4">
-        <div className="text-6xl mb-4">📄</div>
-        <p className="font-medium text-foreground text-center">{file.name}</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          PDFプレビューは非対応です
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          ファイルを別ウィンドウで開いて確認してください
-        </p>
+      <div ref={containerRef} className="h-full rounded-lg border bg-card overflow-hidden">
+        <iframe
+          src={`${pdfUrl}#view=FitH`}
+          className="w-full h-full"
+          title="PDFプレビュー"
+        />
       </div>
     );
   }
@@ -55,11 +58,10 @@ export function FilePreview({ file }: FilePreviewProps) {
   if (previewUrl) {
     return (
       <div className="relative h-full rounded-lg border bg-card overflow-hidden">
-        <Image
+        <img
           src={previewUrl}
           alt="アップロードされたファイルのプレビュー"
-          fill
-          className="object-contain p-2"
+          className="w-full h-full object-contain p-2"
         />
       </div>
     );
