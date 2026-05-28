@@ -6,11 +6,13 @@ import { FilePreview } from "@/components/file-preview";
 import { DataEntryForm, type DataField } from "@/components/data-entry-form";
 import { DataTable, type DataEntry } from "@/components/data-table";
 import { CsvExport } from "@/components/csv-export";
+import { OcrExtractor } from "@/components/ocr-extractor";
 
 export default function TranscriptionTool() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fields, setFields] = useState<DataField[]>([]);
   const [entries, setEntries] = useState<DataEntry[]>([]);
+  const [extractedText, setExtractedText] = useState("");
 
   const handleAddPending = () => {
     // 少なくとも1つのフィールドに値がある場合のみ追加
@@ -88,6 +90,16 @@ export default function TranscriptionTool() {
               <div className="aspect-[4/3] lg:aspect-auto lg:h-[400px]">
                 <FilePreview file={selectedFile} />
               </div>
+            </div>
+
+            {/* OCR機能 */}
+            <div className="rounded-xl border bg-card p-5">
+              <OcrExtractor
+                file={selectedFile}
+                onExtractedText={setExtractedText}
+                fields={fields}
+                onFieldsChange={setFields}
+              />
             </div>
           </div>
 
