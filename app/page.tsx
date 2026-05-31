@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { FileUpload } from "@/components/file-upload";
 import { FilePreview } from "@/components/file-preview";
 import { DocumentProcessor, type ExtractedData, type ProcessingStatus } from "@/components/document-processor";
@@ -9,18 +9,40 @@ import { EntryTable, type EntryRecord } from "@/components/entry-table";
 import { ExportCsv } from "@/components/export-csv";
 
 export default function TranscriptionTool() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [formData, setFormData] = useState<FormData>(emptyFormData());
   const [entries, setEntries] = useState<EntryRecord[]>([]);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>("idle");
 
-  const handleFileSelect = (file: File | null) => {
-    setSelectedFile(file);
-    if (file) {
-      // 新しいファイルを選択したらフォームをリセット
+  const currentFile = selectedFiles[currentFileIndex] || null;
+
+  const handleFilesSelect = useCallback((files: File[]) => {
+    setSelectedFiles((prev) => [...prev, ...files]);
+    // 新しいファイルが追加されたら、最初の新しいファイルを選択
+    if (selectedFiles.length === 0) {
+      setCurrentFileIndex(0);
       setFormData(emptyFormData());
     }
-  };
+  }, [selectedFiles.length]);
+
+  const handleSelectFile = useCallback((index: number) => {
+    setCurrentFileIndex(index);
+    setFormData(emptyFormData());
+  }, []);
+
+  const handleRemoveFile = useCallback((index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    if (index === currentFileIndex) {
+      // 現在のファイルが削除された場合
+      const newIndex = Math.max(0, index - 1);
+      setCurrentFileIndex(selectedFiles.length > 1 ? newIndex : 0);
+      setFormData(emptyFormData());
+    } else if (index < currentFileIndex) {
+      // 削除されたファイルが現在より前にある場合、インデックスを調整
+      setCurrentFileIndex((prev) => prev - 1);
+    }
+  }, [currentFileIndex, selectedFiles.length]);
 
   const handleProcessingComplete = (data: ExtractedData) => {
     setFormData(extractedToFormData(data));
@@ -38,7 +60,11 @@ export default function TranscriptionTool() {
 
     setEntries([...entries, newEntry]);
     setFormData(emptyFormData());
-    setSelectedFile(null);
+    
+    // 次のファイルに自動で移動
+    if (currentFileIndex < selectedFiles.length - 1) {
+      setCurrentFileIndex((prev) => prev + 1);
+    }
   };
 
   const handleConfirmEntry = (id: string) => {
@@ -83,25 +109,28 @@ export default function TranscriptionTool() {
             {/* ファイルアップロード */}
             <div className="rounded-xl border bg-card p-5">
               <FileUpload
-                selectedFile={selectedFile}
-                onFileSelect={handleFileSelect}
+                selectedFiles={selectedFiles}
+                onFilesSelect={handleFilesSelect}
+                currentIndex={currentFileIndex}
+                onSelectFile={handleSelectFile}
+                onRemoveFile={handleRemoveFile}
               />
             </div>
 
             {/* プレビューエリア */}
             <div className="rounded-xl border bg-card p-5">
               <label className="text-sm font-semibold uppercase tracking-wide text-foreground block mb-3">
-                ファイルプレビュー
+                ファイルプレビュー {selectedFiles.length > 0 && `(${currentFileIndex + 1}/${selectedFiles.length})`}
               </label>
               <div className="h-[400px]">
-                <FilePreview file={selectedFile} />
+                <FilePreview file={currentFile} />
               </div>
             </div>
 
             {/* 自動処理ステータス */}
             <div className="rounded-xl border bg-card p-5">
               <DocumentProcessor
-                file={selectedFile}
+                file={currentFile}
                 onProcessingComplete={handleProcessingComplete}
                 onStatusChange={setProcessingStatus}
               />
