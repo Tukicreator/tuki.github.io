@@ -9,17 +9,38 @@ import { EntryTable, type EntryRecord } from "@/components/entry-table";
 import { ExportCsv } from "@/components/export-csv";
 
 export default function TranscriptionTool() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [formData, setFormData] = useState<FormData>(emptyFormData());
   const [entries, setEntries] = useState<EntryRecord[]>([]);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>("idle");
 
-  const handleFileSelect = (file: File | null) => {
-    setSelectedFile(file);
-    if (file) {
-      // 新しいファイルを選択したらフォームをリセット
+  const currentFile = selectedFiles[currentFileIndex] || null;
+
+  const handleFilesSelect = (newFiles: File[]) => {
+    setSelectedFiles((prev) => [...prev, ...newFiles]);
+    // 新しいファイルが追加されたら、最初の新しいファイルを選択
+    if (selectedFiles.length === 0) {
+      setCurrentFileIndex(0);
       setFormData(emptyFormData());
     }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    // 削除されたファイルより後ろにいる場合、インデックスを調整
+    if (currentFileIndex >= index && currentFileIndex > 0) {
+      setCurrentFileIndex(currentFileIndex - 1);
+    }
+    // 全てのファイルが削除された場合
+    if (selectedFiles.length === 1) {
+      setFormData(emptyFormData());
+    }
+  };
+
+  const handleSelectFile = (index: number) => {
+    setCurrentFileIndex(index);
+    setFormData(emptyFormData());
   };
 
   const handleProcessingComplete = (data: ExtractedData) => {
@@ -38,7 +59,15 @@ export default function TranscriptionTool() {
 
     setEntries([...entries, newEntry]);
     setFormData(emptyFormData());
-    setSelectedFile(null);
+    
+    // 次のファイルに進むか、処理済みファイルを削除
+    if (currentFileIndex < selectedFiles.length - 1) {
+      setCurrentFileIndex(currentFileIndex + 1);
+    } else {
+      // 全てのファイルを処理済み
+      setSelectedFiles([]);
+      setCurrentFileIndex(0);
+    }
   };
 
   const handleConfirmEntry = (id: string) => {
@@ -83,10 +112,35 @@ export default function TranscriptionTool() {
             {/* ファイルアップロード */}
             <div className="rounded-xl border bg-card p-5">
               <FileUpload
-                selectedFile={selectedFile}
-                onFileSelect={handleFileSelect}
+                selectedFiles={selectedFiles}
+                onFilesSelect={handleFilesSelect}
+                onRemoveFile={handleRemoveFile}
               />
             </div>
+
+            {/* ファイル選択タブ（複数ファイルがある場合） */}
+            {selectedFiles.length > 1 && (
+              <div className="rounded-xl border bg-card p-5">
+                <label className="text-sm font-semibold uppercase tracking-wide text-foreground block mb-3">
+                  処理中のファイル ({currentFileIndex + 1}/{selectedFiles.length})
+                </label>
+                <div className="flex gap-2 flex-wrap">
+                  {selectedFiles.map((file, index) => (
+                    <button
+                      key={`${file.name}-${index}`}
+                      onClick={() => handleSelectFile(index)}
+                      className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                        index === currentFileIndex
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted/50 text-foreground border-border hover:border-primary/50"
+                      }`}
+                    >
+                      {index + 1}. {file.name.length > 15 ? file.name.slice(0, 12) + "..." : file.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* プレビューエリア */}
             <div className="rounded-xl border bg-card p-5">
@@ -94,14 +148,14 @@ export default function TranscriptionTool() {
                 ファイルプレビュー
               </label>
               <div className="h-[400px]">
-                <FilePreview file={selectedFile} />
+                <FilePreview file={currentFile} />
               </div>
             </div>
 
             {/* 自動処理ステータス */}
             <div className="rounded-xl border bg-card p-5">
               <DocumentProcessor
-                file={selectedFile}
+                file={currentFile}
                 onProcessingComplete={handleProcessingComplete}
                 onStatusChange={setProcessingStatus}
               />
