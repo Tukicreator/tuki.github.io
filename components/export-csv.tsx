@@ -5,33 +5,27 @@ import { Button } from "@/components/ui/button";
 import type { EntryRecord } from "@/components/entry-table";
 
 interface ExportCsvProps {
+  columns: string[];
   entries: EntryRecord[];
 }
 
-export function ExportCsv({ entries }: ExportCsvProps) {
-  const confirmedEntries = entries.filter((e) => e.confirmed);
+function escapeCsv(value: string): string {
+  if (value.includes(",") || value.includes("\n") || value.includes('"')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
 
+export function ExportCsv({ columns, entries }: ExportCsvProps) {
   const handleExport = () => {
-    if (confirmedEntries.length === 0) return;
+    if (entries.length === 0 || columns.length === 0) return;
 
-    const columns = ["日付", "会社名/店舗名", "金額", "内容"];
-    const keys = ["date", "companyName", "amount", "description"] as const;
-
-    // CSVヘッダー
-    const header = columns.join(",");
+    // CSVヘッダー（AIが判定した列名）
+    const header = columns.map(escapeCsv).join(",");
 
     // CSVデータ行
-    const rows = confirmedEntries.map((entry) =>
-      keys
-        .map((key) => {
-          const value = entry.data[key] || "";
-          // カンマや改行を含む場合はダブルクォートで囲む
-          if (value.includes(",") || value.includes("\n") || value.includes('"')) {
-            return `"${value.replace(/"/g, '""')}"`;
-          }
-          return value;
-        })
-        .join(",")
+    const rows = entries.map((entry) =>
+      columns.map((col) => escapeCsv(entry.cells[col] || "")).join(",")
     );
 
     const csv = [header, ...rows].join("\n");
@@ -43,7 +37,7 @@ export function ExportCsv({ entries }: ExportCsvProps) {
 
     const a = document.createElement("a");
     a.href = url;
-    a.download = `転記データ_${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `抽出データ_${new Date().toISOString().split("T")[0]}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -57,17 +51,17 @@ export function ExportCsv({ entries }: ExportCsvProps) {
           CSV出力
         </label>
         <p className="text-sm text-muted-foreground">
-          確定済みデータをCSVファイルとしてダウンロード
+          一覧のデータをCSVファイルとしてダウンロード
         </p>
       </div>
       <Button
         onClick={handleExport}
-        disabled={confirmedEntries.length === 0}
+        disabled={entries.length === 0}
         className="w-full"
         size="lg"
       >
         <Download className="h-4 w-4 mr-2" />
-        CSVをダウンロード（{confirmedEntries.length}件）
+        CSVをダウンロード（{entries.length}件）
       </Button>
     </div>
   );

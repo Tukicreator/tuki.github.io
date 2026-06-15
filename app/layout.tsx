@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: '転記補助ツール',
-  description: '画像/PDFから効率的にデータを転記するためのツール',
+  title: '数字データ抽出ツール',
+  description: '画像/PDFからAIが列名を自動判定し、表形式の数字データを抽出してCSV出力できるツール',
   generator: 'v0.app',
   icons: {
     icon: [

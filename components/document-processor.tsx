@@ -4,16 +4,15 @@ import { useEffect, useState, useCallback } from "react";
 import { Loader2, CheckCircle, AlertCircle, Scan, Brain } from "lucide-react";
 import { createWorker } from "tesseract.js";
 
-export interface ExtractedData {
-  date: string | null;
-  companyName: string | null;
-  amount: string | null;
-  description: string | null;
+// AIが自動判定した列名と抽出された行データ
+export interface ExtractedTable {
+  columns: string[];
+  rows: string[][];
 }
 
 interface DocumentProcessorProps {
   file: File | null;
-  onProcessingComplete: (data: ExtractedData) => void;
+  onProcessingComplete: (table: ExtractedTable) => void;
   onStatusChange?: (status: ProcessingStatus) => void;
 }
 
@@ -91,10 +90,10 @@ export function DocumentProcessor({
         throw new Error("AI解析に失敗しました");
       }
 
-      const { extractedData } = await response.json();
-      
+      const { table } = await response.json();
+
       updateStatus("complete");
-      onProcessingComplete(extractedData);
+      onProcessingComplete(table);
 
     } catch (err) {
       console.error("Processing error:", err);
