@@ -3,74 +3,70 @@
 import { useState } from "react";
 import { FileUpload } from "@/components/file-upload";
 import { FilePreview } from "@/components/file-preview";
-import { DocumentProcessor, type ExtractedData, type ProcessingStatus } from "@/components/document-processor";
-import { DataForm, type FormData, extractedToFormData, emptyFormData } from "@/components/data-form";
+import {
+  DocumentProcessor,
+  type ExtractedTable,
+  type ProcessingStatus,
+} from "@/components/document-processor";
 import { EntryTable, type EntryRecord } from "@/components/entry-table";
 import { ExportCsv } from "@/components/export-csv";
 
-export default function TranscriptionTool() {
+export default function DataExtractionTool() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [formData, setFormData] = useState<FormData>(emptyFormData());
+  const [columns, setColumns] = useState<string[]>([]);
   const [entries, setEntries] = useState<EntryRecord[]>([]);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus>("idle");
 
   const handleFileSelect = (file: File | null) => {
     setSelectedFile(file);
-    if (file) {
-      // 新しいファイルを選択したらフォームをリセット
-      setFormData(emptyFormData());
+  };
+
+  // AI解析完了時: 抽出された表データを必ず一覧へ追加する
+  const handleProcessingComplete = (table: ExtractedTable) => {
+    if (!table || !Array.isArray(table.columns) || table.columns.length === 0) {
+      return;
     }
-  };
 
-  const handleProcessingComplete = (data: ExtractedData) => {
-    setFormData(extractedToFormData(data));
-  };
+    // 既存の列と統合（新しい列があれば末尾に追加）
+    setColumns((prev) => {
+      const merged = [...prev];
+      for (const col of table.columns) {
+        if (!merged.includes(col)) merged.push(col);
+      }
+      return merged;
+    });
 
-  const handleAddEntry = () => {
-    const hasData = formData.date || formData.companyName || formData.amount || formData.description;
-    if (!hasData) return;
+    // 抽出された各行をエントリーとして追加
+    const newEntries: EntryRecord[] = (table.rows || []).map((row) => {
+      const cells: Record<string, string> = {};
+      table.columns.forEach((col, i) => {
+        cells[col] = row[i] ?? "";
+      });
+      return { id: crypto.randomUUID(), cells };
+    });
 
-    const newEntry: EntryRecord = {
-      id: crypto.randomUUID(),
-      data: { ...formData },
-      confirmed: false,
-    };
-
-    setEntries([...entries, newEntry]);
-    setFormData(emptyFormData());
+    setEntries((prev) => [...prev, ...newEntries]);
     setSelectedFile(null);
   };
 
-  const handleConfirmEntry = (id: string) => {
-    setEntries(
-      entries.map((entry) =>
-        entry.id === id ? { ...entry, confirmed: true } : entry
-      )
-    );
-  };
-
-  const handleUpdateEntry = (id: string, data: FormData) => {
-    setEntries(
-      entries.map((entry) =>
-        entry.id === id ? { ...entry, data } : entry
-      )
+  const handleUpdateEntry = (id: string, cells: Record<string, string>) => {
+    setEntries((prev) =>
+      prev.map((entry) => (entry.id === id ? { ...entry, cells } : entry))
     );
   };
 
   const handleDeleteEntry = (id: string) => {
-    setEntries(entries.filter((entry) => entry.id !== id));
+    setEntries((prev) => prev.filter((entry) => entry.id !== id));
   };
-
-  const isProcessing = processingStatus === "ocr-processing" || processingStatus === "ai-analyzing";
 
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b bg-card">
         <div className="container mx-auto px-4 py-4">
-          <h1 className="text-xl font-bold text-foreground">転記補助ツール</h1>
+          <h1 className="text-xl font-bold text-foreground">数字データ抽出ツール</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            画像/PDFをアップロード → 自動でOCR & AI解析 → 編集 → CSV出力
+            画像/PDFをアップロード → AIが列名を自動判定して表データを抽出 → 一覧に追加 → CSV出力
           </p>
         </div>
       </header>
@@ -82,10 +78,7 @@ export default function TranscriptionTool() {
           <div className="space-y-6">
             {/* ファイルアップロード */}
             <div className="rounded-xl border bg-card p-5">
-              <FileUpload
-                selectedFile={selectedFile}
-                onFileSelect={handleFileSelect}
-              />
+              <FileUpload selectedFile={selectedFile} onFileSelect={handleFileSelect} />
             </div>
 
             {/* プレビューエリア */}
@@ -108,31 +101,21 @@ export default function TranscriptionTool() {
             </div>
           </div>
 
-          {/* 右側: データ入力＆テーブル */}
+          {/* 右側: データ一覧＆CSV出力 */}
           <div className="space-y-6">
-            {/* データ編集フォーム */}
-            <div className="rounded-xl border bg-card p-5">
-              <DataForm
-                data={formData}
-                onDataChange={setFormData}
-                onAddEntry={handleAddEntry}
-                disabled={isProcessing}
-              />
-            </div>
-
             {/* データテーブル */}
             <div className="rounded-xl border bg-card p-5">
               <EntryTable
+                columns={columns}
                 entries={entries}
                 onDeleteEntry={handleDeleteEntry}
-                onConfirmEntry={handleConfirmEntry}
                 onUpdateEntry={handleUpdateEntry}
               />
             </div>
 
             {/* CSV出力 */}
             <div className="rounded-xl border bg-card p-5">
-              <ExportCsv entries={entries} />
+              <ExportCsv columns={columns} entries={entries} />
             </div>
           </div>
         </div>

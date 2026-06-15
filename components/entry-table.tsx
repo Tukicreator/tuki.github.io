@@ -12,40 +12,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { FormData } from "@/components/data-form";
 
+// 1行分のデータ。列名(動的)をキーとした値のマップ
 export interface EntryRecord {
   id: string;
-  data: FormData;
-  confirmed: boolean;
+  cells: Record<string, string>;
 }
 
 interface EntryTableProps {
+  columns: string[];
   entries: EntryRecord[];
   onDeleteEntry: (id: string) => void;
-  onConfirmEntry: (id: string) => void;
-  onUpdateEntry: (id: string, data: FormData) => void;
+  onUpdateEntry: (id: string, cells: Record<string, string>) => void;
 }
 
-const columns = [
-  { key: "date", label: "日付" },
-  { key: "companyName", label: "会社名/店舗名" },
-  { key: "amount", label: "金額" },
-  { key: "description", label: "内容" },
-] as const;
-
 export function EntryTable({
+  columns,
   entries,
   onDeleteEntry,
-  onConfirmEntry,
   onUpdateEntry,
 }: EntryTableProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<FormData | null>(null);
+  const [editData, setEditData] = useState<Record<string, string> | null>(null);
 
   const handleStartEdit = (entry: EntryRecord) => {
     setEditingId(entry.id);
-    setEditData({ ...entry.data });
+    setEditData({ ...entry.cells });
   };
 
   const handleSaveEdit = (id: string) => {
@@ -61,8 +53,7 @@ export function EntryTable({
     setEditData(null);
   };
 
-  const pendingEntries = entries.filter((e) => !e.confirmed);
-  const confirmedEntries = entries.filter((e) => e.confirmed);
+  const hasColumns = columns.length > 0;
 
   return (
     <div className="space-y-4">
@@ -72,12 +63,10 @@ export function EntryTable({
             登録データ一覧
           </label>
           <p className="text-sm text-muted-foreground">
-            確定済みデータはCSV出力可能です
+            AIが抽出したデータが自動で追加されます
           </p>
         </div>
-        <span className="text-sm text-muted-foreground">
-          確認待ち {pendingEntries.length} 件 / 確定 {confirmedEntries.length} 件
-        </span>
+        <span className="text-sm text-muted-foreground">{entries.length} 件</span>
       </div>
 
       <div className="rounded-lg border bg-card overflow-hidden">
@@ -86,20 +75,23 @@ export function EntryTable({
             <TableHeader>
               <TableRow className="bg-muted/50">
                 <TableHead className="w-12 text-center">#</TableHead>
-                <TableHead className="w-20 text-center">状態</TableHead>
-                {columns.map((col) => (
-                  <TableHead key={col.key} className="font-semibold">
-                    {col.label}
-                  </TableHead>
-                ))}
-                <TableHead className="w-28 text-center">操作</TableHead>
+                {hasColumns ? (
+                  columns.map((col) => (
+                    <TableHead key={col} className="font-semibold whitespace-nowrap">
+                      {col}
+                    </TableHead>
+                  ))
+                ) : (
+                  <TableHead className="font-semibold">データ</TableHead>
+                )}
+                <TableHead className="w-24 text-center">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {entries.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={columns.length + 3}
+                    colSpan={(hasColumns ? columns.length : 1) + 2}
                     className="h-24 text-center text-muted-foreground"
                   >
                     まだデータがありません。ファイルをアップロードすると自動で解析されます。
@@ -107,40 +99,22 @@ export function EntryTable({
                 </TableRow>
               ) : (
                 entries.map((entry, index) => (
-                  <TableRow
-                    key={entry.id}
-                    className={
-                      entry.confirmed
-                        ? "bg-primary/5"
-                        : "bg-amber-50 dark:bg-amber-950/20"
-                    }
-                  >
+                  <TableRow key={entry.id}>
                     <TableCell className="text-center text-muted-foreground">
                       {index + 1}
                     </TableCell>
-                    <TableCell className="text-center">
-                      {entry.confirmed ? (
-                        <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                          確定
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-1 text-xs font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
-                          確認待ち
-                        </span>
-                      )}
-                    </TableCell>
                     {columns.map((col) => (
-                      <TableCell key={col.key}>
+                      <TableCell key={col} className="whitespace-nowrap">
                         {editingId === entry.id && editData ? (
                           <Input
-                            value={editData[col.key]}
+                            value={editData[col] ?? ""}
                             onChange={(e) =>
-                              setEditData({ ...editData, [col.key]: e.target.value })
+                              setEditData({ ...editData, [col]: e.target.value })
                             }
-                            className="h-8"
+                            className="h-8 min-w-24"
                           />
                         ) : (
-                          entry.data[col.key] || "-"
+                          entry.cells[col] || "-"
                         )}
                       </TableCell>
                     ))}
@@ -169,18 +143,6 @@ export function EntryTable({
                           </>
                         ) : (
                           <>
-                            {!entry.confirmed && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => onConfirmEntry(entry.id)}
-                                className="h-8 w-8 text-primary hover:text-primary"
-                                title="確定する"
-                              >
-                                <Check className="h-4 w-4" />
-                                <span className="sr-only">確定</span>
-                              </Button>
-                            )}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -212,18 +174,6 @@ export function EntryTable({
           </Table>
         </div>
       </div>
-
-      {pendingEntries.length > 0 && (
-        <div className="flex justify-end">
-          <Button
-            onClick={() => pendingEntries.forEach((e) => onConfirmEntry(e.id))}
-            className="gap-2"
-          >
-            <Check className="h-4 w-4" />
-            すべて確定する
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
