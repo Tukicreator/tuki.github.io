@@ -1,78 +1,66 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
 
-// AIが列名を自動判定し、表形式データを抽出するスキーマ
-const tableSchema = z.object({
-  columns: z
-    .array(z.string())
-    .describe(
-      "資料から判定した列名（ヘッダー）の配列。例: ['商品名','単価','数量','合計']。資料の内容に応じて適切な列名を自由に決めること。"
-    ),
-  rows: z
-    .array(z.array(z.string()))
-    .describe(
-      "各行のデータ。各行は columns と同じ順序・同じ要素数の文字列配列。該当データが無いセルは空文字にする。"
-    ),
+// AI は「表」を作らず、文字・数字とその位置情報(x, y)だけを抽出する
+const elementsSchema = z.object({
+  elements: z
+    .array(
+      z.object({
+        text: z.string().describe("読み取った文字や数字（1つの語/セル単位）"),
+        x: z.number().describe("要素の中心の x 座標（画像の左上が原点、右方向が正）"),
+        y: z.number().describe("要素の中心の y 座標（画像の左上が原点、下方向が正）"),
+      })
+    )
+    .describe("画像内から読み取った全ての文字・数字要素とその位置情報"),
 });
 
-const INSTRUCTION = `あなたは資料から数値データを抽出する専門アシスタントです。
-画像やテキストから表形式のデータを読み取り、構造化してください。
+const INSTRUCTION = `あなたは画像から文字・数字とその位置情報を抽出するOCRエンジンです。
 
-出力は必ず次のJSONオブジェクトだけにしてください。説明文、コメント、Markdown、\`\`\`json などのコードフェンスは一切含めないでください。
-{
-  "columns": ["列名1", "列名2", "列名3"],
-  "rows": [
-    ["値1", "値2", "値3"]
-  ]
-}
-
-ルール:
-- 出力はこのJSON以外の文字を含めないこと（前後の挨拶・説明も禁止）。
-- columns はテーブルの見出し（ヘッダー）。資料の内容を見て最も適切な列名を自分で判定すること。固定の項目に縛られる必要はありません。
-- rows はテーブルの中身。各行は columns と同じ順序・同じ要素数の文字列配列にすること。
-- 経理・営業・在庫など、あらゆる業務の数字データに対応してください。
-- 表が含まれる場合は、その表の見出しを columns、各行を rows として抽出してください。
-- 表形式でない請求書や領収書などの場合でも、日付・会社名・金額・内容など読み取れる項目を列として構成してください。
-- 数値はできるだけそのままの表記で抽出してください（カンマや単位を含めてよい）。
-- 該当データが無いセルは空文字 "" にすること。`;
+【重要】あなたの役割は「抽出」だけです。表(Excel)を完成させようとしないでください。
+- 表の組み立て・列の対応付け・行の整理は一切行わないでください。
+- 読み取れる文字や数字を、できるだけ漏れなく1つずつ要素として返してください。
+- 各要素には必ず画像内の位置情報(x, y)を付けてください。x は左からの位置、y は上からの位置です。
+- 座標は画像左上を原点(0,0)とし、ピクセル相当の数値で推定してください。
+- 同じ行(横並び)の要素は y の値がほぼ同じになるようにしてください。
+- 出力は指定されたJSON(elements配列)のみ。説明文・Markdown・コードフェンスは含めないでください。`;
 
 export async function POST(req: Request) {
   const { text, imageBase64, mimeType } = await req.json();
 
   try {
-    // 画像ベースの解析（優先）
+    // 画像ベースの抽出（優先）
     if (imageBase64 && mimeType) {
       const { output } = await generateText({
         model: "openai/gpt-4o-mini",
-        output: Output.object({ schema: tableSchema }),
+        output: Output.object({ schema: elementsSchema }),
         messages: [
           {
             role: "user",
             content: [
-              { type: "text", text: `${INSTRUCTION}\n\nこの画像から表形式データを抽出してください。` },
-              { type: "image", image: imageBase64, mimeType: mimeType },
+              { type: "text", text: `${INSTRUCTION}\n\nこの画像から文字・数字と位置情報を抽出してください。` },
+              { type: "image", image: imageBase64, mediaType: mimeType },
             ],
           },
         ],
       });
 
-      return Response.json({ table: output });
+      return Response.json({ elements: output.elements });
     }
 
-    // テキストベースの解析（OCR結果を使用）
+    // テキストベースの抽出（OCRテキストのみで座標が無い場合の近似フォールバック）
     if (text) {
       const { output } = await generateText({
         model: "openai/gpt-4o-mini",
-        output: Output.object({ schema: tableSchema }),
+        output: Output.object({ schema: elementsSchema }),
         messages: [
           {
             role: "user",
-            content: `${INSTRUCTION}\n\n以下のテキストから表形式データを抽出してください。\n\nテキスト:\n${text}`,
+            content: `${INSTRUCTION}\n\n以下はOCRで読み取ったテキストです。行と列のレイアウトを推測し、各語に近似的な位置情報(x, y)を付けて要素として返してください。同じ行の語は同じ y、左右の位置に応じて x を変えてください。\n\nテキスト:\n${text}`,
           },
         ],
       });
 
-      return Response.json({ table: output });
+      return Response.json({ elements: output.elements });
     }
 
     return Response.json({ error: "テキストまたは画像データが必要です" }, { status: 400 });
