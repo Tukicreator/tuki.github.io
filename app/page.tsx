@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FileUpload } from "@/components/file-upload";
-import { FilePreview } from "@/components/file-preview";
+import { RegionSelector } from "@/components/region-selector";
 import {
   DocumentProcessor,
   type ExtractedTable,
@@ -13,6 +13,8 @@ import { ExportCsv } from "@/components/export-csv";
 
 export default function DataExtractionTool() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // 選択領域を切り出した画像（実際にOCR/AI解析する対象）
+  const [regionFile, setRegionFile] = useState<File | null>(null);
   const [columns, setColumns] = useState<string[]>([]);
   const [entries, setEntries] = useState<EntryRecord[]>([]);
   const [unclassified, setUnclassified] = useState<string[]>([]);
@@ -20,6 +22,12 @@ export default function DataExtractionTool() {
 
   const handleFileSelect = (file: File | null) => {
     setSelectedFile(file);
+    setRegionFile(null);
+  };
+
+  // 選択範囲が確定したら、その領域だけを解析対象にする
+  const handleRegionConfirmed = (croppedFile: File) => {
+    setRegionFile(croppedFile);
   };
 
   // 解析完了時: 組み立てた表データを必ず一覧へ追加する
@@ -55,7 +63,8 @@ export default function DataExtractionTool() {
       setUnclassified((prev) => [...prev, ...table.unclassified]);
     }
 
-    setSelectedFile(null);
+    // 解析対象をクリア（元ファイルは残し、別範囲を再選択できるようにする）
+    setRegionFile(null);
   };
 
   const handleUpdateEntry = (id: string, cells: Record<string, string>) => {
@@ -90,20 +99,28 @@ export default function DataExtractionTool() {
               <FileUpload selectedFile={selectedFile} onFileSelect={handleFileSelect} />
             </div>
 
-            {/* プレビューエリア */}
+            {/* 解析範囲の選択 */}
             <div className="rounded-xl border bg-card p-5">
-              <label className="text-sm font-semibold uppercase tracking-wide text-foreground block mb-3">
-                ファイルプレビュー
+              <label className="text-sm font-semibold uppercase tracking-wide text-foreground block mb-1">
+                ステップ2: 解析範囲を選択
               </label>
-              <div className="h-[400px]">
-                <FilePreview file={selectedFile} />
-              </div>
+              <p className="text-sm text-muted-foreground mb-3">
+                抽出したい表を四角で囲むと、その範囲内の文字・数字だけを解析します
+              </p>
+              <RegionSelector
+                file={selectedFile}
+                onRegionConfirmed={handleRegionConfirmed}
+                disabled={
+                  processingStatus === "ocr-processing" ||
+                  processingStatus === "ai-analyzing"
+                }
+              />
             </div>
 
             {/* 自動処理ステータス */}
             <div className="rounded-xl border bg-card p-5">
               <DocumentProcessor
-                file={selectedFile}
+                file={regionFile}
                 onProcessingComplete={handleProcessingComplete}
                 onStatusChange={setProcessingStatus}
               />
