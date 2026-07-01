@@ -3,11 +3,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { Loader2, CheckCircle, AlertCircle, Scan, Brain } from "lucide-react";
 import { createWorker } from "tesseract.js";
+import { buildTable, type TextElement } from "@/lib/build-table";
 
-// AIが自動判定した列名と抽出された行データ
+// アプリ側で組み立てた表データ（列見出し・行・未分類）
 export interface ExtractedTable {
   columns: string[];
   rows: string[][];
+  unclassified: string[];
 }
 
 interface DocumentProcessorProps {
@@ -23,6 +25,33 @@ export type ProcessingStatus =
   | "ai-analyzing"
   | "complete"
   | "error";
+
+// Tesseractのword単位bboxから、位置情報付きの要素配列を作る
+// data.blocks -> paragraphs -> lines -> words[].bbox に実際の座標が入っている
+function extractElementsFromOcr(data: any): TextElement[] {
+  const elements: TextElement[] = [];
+  const blocks = data?.blocks ?? [];
+
+  for (const block of blocks) {
+    for (const paragraph of block?.paragraphs ?? []) {
+      for (const line of paragraph?.lines ?? []) {
+        for (const word of line?.words ?? []) {
+          const t = (word?.text ?? "").trim();
+          const bbox = word?.bbox;
+          if (!t || !bbox) continue;
+          elements.push({
+            text: t,
+            x: (bbox.x0 + bbox.x1) / 2,
+            y: (bbox.y0 + bbox.y1) / 2,
+            h: Math.abs(bbox.y1 - bbox.y0),
+          });
+        }
+      }
+    }
+  }
+
+  return elements;
+}
 
 export function DocumentProcessor({
   file,
@@ -46,7 +75,7 @@ export function DocumentProcessor({
     updateStatus("ocr-processing");
 
     try {
-      // Step 1: OCR処理
+      // Step 1: OCR処理（word単位の位置情報 bbox も取得する）
       const worker = await createWorker("jpn+eng", 1, {
         logger: (m) => {
           if (m.status === "recognizing text") {
@@ -56,41 +85,46 @@ export function DocumentProcessor({
       });
 
       const imageUrl = URL.createObjectURL(file);
-      const { data: { text } } = await worker.recognize(imageUrl);
+      // blocks: true で単語ごとの bbox（実際の座標）を含むデータを取得
+      const { data } = await worker.recognize(imageUrl, {}, { blocks: true, text: true });
       URL.revokeObjectURL(imageUrl);
       await worker.terminate();
 
+      const text = data.text ?? "";
       setOcrText(text);
       setProgress(100);
 
-      // Step 2: AI解析
+      // Step 2: OCRのword bboxから位置情報付き要素を作る（AI/アプリの役割分担）
       updateStatus("ai-analyzing");
 
-      // 画像の場合はBase64も送信
-      let imageBase64: string | undefined;
-      let mimeType: string | undefined;
+      let elements: TextElement[] = extractElementsFromOcr(data);
 
-      if (file.type.startsWith("image/")) {
-        const buffer = await file.arrayBuffer();
-        imageBase64 = Buffer.from(buffer).toString("base64");
-        mimeType = file.type;
+      // OCRで要素が取れなかった場合のみ、AIに位置情報付き抽出を依頼（フォールバック）
+      if (elements.length === 0) {
+        let imageBase64: string | undefined;
+        let mimeType: string | undefined;
+        if (file.type.startsWith("image/")) {
+          const buffer = await file.arrayBuffer();
+          imageBase64 = Buffer.from(buffer).toString("base64");
+          mimeType = file.type;
+        }
+
+        const response = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text, imageBase64, mimeType }),
+        });
+
+        if (!response.ok) {
+          throw new Error("AI解析に失敗しました");
+        }
+
+        const { elements: aiElements } = await response.json();
+        elements = Array.isArray(aiElements) ? aiElements : [];
       }
 
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          text,
-          imageBase64,
-          mimeType,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("AI解析に失敗しました");
-      }
-
-      const { table } = await response.json();
+      // Step 3: アプリ側で位置情報から表を組み立てる
+      const table = buildTable(elements);
 
       updateStatus("complete");
       onProcessingComplete(table);
