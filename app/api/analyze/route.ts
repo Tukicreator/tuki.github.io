@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import { analysisModel } from "@/lib/ai";
 
 // AIが列名を自動判定し、表形式データを抽出するスキーマ
 const tableSchema = z.object({
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     // 画像ベースの解析（優先）
     if (imageBase64 && mimeType) {
       const { output } = await generateText({
-        model: "openai/gpt-4o-mini",
+        model: analysisModel,
         output: Output.object({ schema: tableSchema }),
         messages: [
           {
@@ -52,7 +53,7 @@ export async function POST(req: Request) {
     // テキストベースの解析（OCR結果を使用）
     if (text) {
       const { output } = await generateText({
-        model: "openai/gpt-4o-mini",
+        model: analysisModel,
         output: Output.object({ schema: tableSchema }),
         messages: [
           {

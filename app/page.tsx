@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { FileUpload } from "@/components/file-upload";
-import { FilePreview } from "@/components/file-preview";
 import {
-  DocumentProcessor,
+  TableDetector,
   type ExtractedTable,
   type ProcessingStatus,
-} from "@/components/document-processor";
+} from "@/components/table-detector";
 import { EntryTable, type EntryRecord } from "@/components/entry-table";
 import { ExportCsv } from "@/components/export-csv";
 
@@ -46,7 +45,6 @@ export default function DataExtractionTool() {
     });
 
     setEntries((prev) => [...prev, ...newEntries]);
-    setSelectedFile(null);
   };
 
   const handleUpdateEntry = (id: string, cells: Record<string, string>) => {
@@ -66,7 +64,7 @@ export default function DataExtractionTool() {
         <div className="container mx-auto px-4 py-4">
           <h1 className="text-xl font-bold text-foreground">数字データ抽出ツール</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            画像/PDFをアップロード → AIが列名を自動判定して表データを抽出 → 一覧に追加 → CSV出力
+            画像をアップロード → 表を自動検出 → 解析したい表を選択 → 選択分だけAI解析 → 一覧に追加 → CSV出力
           </p>
         </div>
       </header>
@@ -74,26 +72,16 @@ export default function DataExtractionTool() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* 左側: ファイルアップロード＆プレビュー */}
+          {/* 左側: ファイルアップロード＆表検出/解析 */}
           <div className="space-y-6">
             {/* ファイルアップロード */}
             <div className="rounded-xl border bg-card p-5">
               <FileUpload selectedFile={selectedFile} onFileSelect={handleFileSelect} />
             </div>
 
-            {/* プレビューエリア */}
+            {/* 表検出・選択・解析 */}
             <div className="rounded-xl border bg-card p-5">
-              <label className="text-sm font-semibold uppercase tracking-wide text-foreground block mb-3">
-                ファイルプレビュー
-              </label>
-              <div className="h-[400px]">
-                <FilePreview file={selectedFile} />
-              </div>
-            </div>
-
-            {/* 自動処理ステータス */}
-            <div className="rounded-xl border bg-card p-5">
-              <DocumentProcessor
+              <TableDetector
                 file={selectedFile}
                 onProcessingComplete={handleProcessingComplete}
                 onStatusChange={setProcessingStatus}
