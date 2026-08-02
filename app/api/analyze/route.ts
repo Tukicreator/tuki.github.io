@@ -1,5 +1,6 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
+import { analysisModel } from "@/lib/ai";
 
 // AIが列名を自動判定し、表形式データを抽出するスキーマ
 const tableSchema = z.object({
