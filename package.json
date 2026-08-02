@@ -9,7 +9,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@ai-sdk/openai": "^4.0.27",
+    "@ai-sdk/openai": "^2.0.117",
     "@ai-sdk/react": "^3.0.194",
     "@hookform/resolvers": "^3.9.1",
     "@radix-ui/react-accordion": "1.2.12",
